@@ -60,7 +60,7 @@ minio/minio:latest:
   variables:
     DOCKERFILE_PATH: build/minio.Dockerfile
 
-nginx:19-alpine:
+nginx:1.19-alpine:
   extends: .save-img-job
   variables:
     DOCKERFILE_PATH: build/nginx.Dockerfile
