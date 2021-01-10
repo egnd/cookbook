@@ -1,0 +1,51 @@
+.base-image:
+  retry: 1
+
+.golang-cache:
+  extends: .base-image
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
+  before_script:
+    - mkdir -p .go
+  cache:
+    key: go_dependencies
+    when: on_success
+    paths:
+      - .go/pkg/mod/
+
+.dind-job:
+  extends: .base-image
+  image: ${CI_REGISTRY_IMAGE}/docker:20
+  services:
+    - name: ${CI_REGISTRY_IMAGE}/docker:20-dind
+      alias: docker
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - docker login ${CI_REGISTRY} -u gitlab-ci-token -p ${CI_JOB_TOKEN}
+
+.build-commit-img-job:
+  extends: .dind-job
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - docker login ${CI_REGISTRY} -u gitlab-ci-token -p ${CI_JOB_TOKEN}
+    - docker build --tag=${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-arm32 --target=linux-arm32
+      --build-arg BASE_IMG=${CI_REGISTRY_IMAGE}/alpine:3.12 .
+    - docker build --tag=${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-amd64 --target=linux-amd64
+      --build-arg BASE_IMG=${CI_REGISTRY_IMAGE}/alpine:3.12 .
+    - docker images
+
+.tag-img-job:
+  extends: .dind-job
+  variables:
+    GIT_STRATEGY: none
+    SRC_TAG: ${CI_COMMIT_SHORT_SHA}-${ARCH_TYPE}
+    TARGET_TAG: ${CI_COMMIT_REF_NAME}-${ARCH_TYPE}
+  script:
+    - docker pull ${CI_REGISTRY_IMAGE}/commit:${SRC_TAG}
+    - docker tag ${CI_REGISTRY_IMAGE}/commit:${SRC_TAG} ${CI_REGISTRY_IMAGE}/bot:${TARGET_TAG}
+    - docker push ${CI_REGISTRY_IMAGE}/bot:${TARGET_TAG}
+    - docker images

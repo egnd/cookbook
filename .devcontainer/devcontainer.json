@@ -1,0 +1,46 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.154.0/containers/go
+// https://code.visualstudio.com/docs/remote/devcontainerjson-reference
+// https://code.visualstudio.com/docs/editor/variables-reference
+{
+	"name": "Go",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			"VARIANT": "1.15",
+		}
+	},
+	"runArgs": [ "--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined" ],
+	"settings": { 
+		"terminal.integrated.shell.linux": "/bin/bash",
+        "terminal.integrated.shell.osx": "/bin/zsh",
+		"go.useGoProxyToCheckForToolUpdates": false,
+		"go.useLanguageServer": true,
+		"go.gopath": "/go",
+        "go.goroot": "/go",
+		"go.toolsGopath": "/go/bin",
+        "gopls": {
+            "usePlaceholders": true,
+            "staticcheck": false,
+            "completeUnimported": true,
+        },
+	},
+	"containerEnv": {
+		"TZ": "Europe/Moscow",
+		"GOPATH": "/tmp/gocache",
+	},
+	"mounts": [
+		"source=cookbookdepscache,target=/tmp/gocache,type=volume",
+    ],
+	"extensions": [
+		"golang.go",
+        "ms-azuretools.vscode-docker",
+        "mikestead.dotenv",
+        "codezombiech.gitignore",
+        "yzhang.markdown-all-in-one",
+        "christian-kohler.path-intellisense",
+        "wayou.vscode-todo-highlight",
+        "redhat.vscode-yaml",
+        "eamodio.gitlens",
+	],
+}

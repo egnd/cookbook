@@ -1,0 +1,9 @@
+version: "3.8"
+services:
+  app:
+    image: ${DC_APP_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      TZ: ${DC_TZ}

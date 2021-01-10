@@ -1,0 +1,12 @@
+logging:
+  format: json
+app:
+  port: 8080
+elastic:
+  host: elasticsearch_host
+minio:
+  host: minio_host
+  key: xxxxxxx
+  secret: xxxxxxx
+  bucket: 
+    uploads: cb_uploads

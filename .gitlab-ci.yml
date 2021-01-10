@@ -1,0 +1,186 @@
+stages:
+  - images
+  - checklist
+  - tests
+  - build
+  - release
+
+include:
+  - /build/ci/gitlab/jobs.yml
+  - /build/ci/gitlab/images.yml
+
+############################################################################## images
+
+# jobs from build/ci/gitlab/images-jobs.yml
+
+############################################################################## checklist
+
+conflicts:
+  extends: .base-image
+  image: ${CI_REGISTRY_IMAGE}/alpine:3.12
+  retry: 0
+  stage: checklist
+  script:
+    - make check-conflicts
+  except:
+    - schedules
+    - tags
+
+gitflow:
+  extends: conflicts
+  script:
+    - make check-master
+  except:
+    - schedules
+    - tags
+    - master
+
+todos:
+  extends: conflicts
+  script:
+    - make check-todos
+  allow_failure: true
+
+############################################################################## tests
+
+unit-tests:
+  extends: .golang-cache
+  image: ${CI_REGISTRY_IMAGE}/golang:1.15-alpine
+  stage: tests
+  coverage: '/total:\s+\(statements\)\s+\d+.\d+%/'
+  script:
+    - make mocks test
+  except:
+    - schedules
+    - tags
+
+linters:
+  extends: .golang-cache
+  image: ${CI_REGISTRY_IMAGE}/golang:1.15-alpine
+  stage: tests
+  script:
+    - make lint
+  except:
+    - schedules
+    - tags
+
+build:
+  extends: .golang-cache
+  image: ${CI_REGISTRY_IMAGE}/golang:1.15-alpine
+  stage: tests
+  script:
+    - make build BUILD_VERSION=${CI_COMMIT_REF_NAME}
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    when: on_success
+    paths:
+      - bin
+      - configs
+      - Dockerfile
+      - Makefile
+      - docker-compose.yml
+      - .env.dist
+  except:
+    - schedules
+    - tags
+
+############################################################################## build image
+
+images:
+  extends: .build-commit-img-job
+  stage: build
+  dependencies:
+    - build
+  script:
+    - cp .env.dist .env &&
+      sed -i "s#DC_CACHE_IMAGE=#DC_CACHE_IMAGE=${CI_REGISTRY_IMAGE}/#g" .env &&
+      echo "DC_APP_IMAGE=${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-amd64" >> .env &&
+      echo "TB_BOT_ADMIN=testadmin" >> .env &&
+      cat .env &&
+      echo "TB_BOT_TOKEN=${DC_TEST_TOKEN}" >> .env
+    - docker-compose up --detach
+    - docker-compose logs --no-color --timestamps --follow >> compose.log &
+    - sleep 15
+    - docker ps
+    - docker-compose ps app | grep Up
+    - docker-compose ps cache | grep Up
+    - grep '"msg":"listening..."' compose.log
+    - docker-compose down --remove-orphans
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    when: always
+    paths:
+      - compose.log
+  except:
+    - tags
+    - schedules
+    - master
+
+stable images:
+  extends: .build-commit-img-job
+  stage: build
+  dependencies:
+    - build
+  script:
+    - cp .env.dist .env &&
+      sed -i "s#DC_CACHE_IMAGE=#DC_CACHE_IMAGE=${CI_REGISTRY_IMAGE}/#g" .env &&
+      echo "DC_APP_IMAGE=${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-amd64" >> .env &&
+      echo "TB_BOT_ADMIN=testadmin" >> .env &&
+      cat .env &&
+      echo "TB_BOT_TOKEN=${DC_TEST_TOKEN}" >> .env
+    - docker-compose up --detach
+    - docker-compose logs --no-color --timestamps --follow >> compose.log &
+    - sleep 15
+    - docker ps
+    - docker-compose ps app | grep Up
+    - docker-compose ps cache | grep Up
+    - grep '"msg":"listening..."' compose.log
+    - docker-compose down --remove-orphans
+    - docker push ${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-arm32
+    - docker push ${CI_REGISTRY_IMAGE}/commit:${CI_COMMIT_SHORT_SHA}-linux-amd64
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    when: always
+    paths:
+      - compose.log
+  only:
+    - master
+  except:
+    - schedules
+
+############################################################################## release
+
+latest-linux-amd64:
+  extends: .tag-img-job
+  variables:
+    SRC_TAG: ${CI_COMMIT_SHORT_SHA}-linux-amd64
+    TARGET_TAG: latest-linux-amd64
+  stage: release
+  only:
+    - master
+  except:
+    - schedules
+
+latest-linux-arm32:
+  extends: latest-linux-amd64
+  variables:
+    SRC_TAG: ${CI_COMMIT_SHORT_SHA}-linux-arm32
+    TARGET_TAG: latest-linux-arm32
+
+stable-linux-amd64:
+  extends: .tag-img-job
+  variables:
+    SRC_TAG: ${CI_COMMIT_SHORT_SHA}-linux-amd64
+    TARGET_TAG: ${CI_COMMIT_REF_NAME}-linux-amd64
+  stage: release
+  only:
+    - tags
+
+stable-linux-arm32:
+  extends: stable-linux-amd64
+  variables:
+    SRC_TAG: ${CI_COMMIT_SHORT_SHA}-linux-arm32
+    TARGET_TAG: ${CI_COMMIT_REF_NAME}-linux-arm32
